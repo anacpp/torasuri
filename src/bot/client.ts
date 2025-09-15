@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { logger } from '@logger';
+import { loadEnvFile } from 'process';
 
 export function createDiscordClient() {
   const client = new Client({

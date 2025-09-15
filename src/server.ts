@@ -1,11 +1,12 @@
 import 'dotenv/config';
+import './utils/env';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 
 import { logger } from '@logger';
 import { registerRoutes } from '@router';
-import { createDiscordClient, startDiscordBot } from '@discord/client.js';
+import { createDiscordClient, startDiscordBot } from '@discord/client';
 
 const PORT = process.env.PORT || 3000;
 

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "types": ["node"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -12,8 +12,8 @@
     "outDir": "dist",
     "baseUrl": "src",
     "paths": {
-      "@logger": ["core/logger.ts"],
-      "@router": ["http/routes/index.ts"],
+      "@logger": ["core/logger"],
+      "@router": ["http/routes/index"],
       "@discord": ["bot"],
       "@discord/*": ["bot/*"],
       "@commands/*": ["bot/commands/*"],

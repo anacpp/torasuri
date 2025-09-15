@@ -2,7 +2,6 @@
   "name": "torasuri",
   "version": "0.1.0",
   "description": "Discord bot + Express API (TypeScript)",
-  "type": "module",
   "main": "dist/server.js",
   "files": [
     "dist"
@@ -11,7 +10,8 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "dev": "ts-node-dev --respawn --clear --transpile-only -r tsconfig-paths/register -r module-alias/register src/server.ts",
+    "dev": "ts-node-dev --respawn --clear --transpile-only -r tsconfig-paths/register src/server.ts",
+    "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "start": "node -r module-alias/register dist/server.js",
     "lint": "eslint 'src/**/*.{ts,tsx}' --max-warnings=0",
