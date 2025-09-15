@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "baseUrl": "src",
+    "paths": {
+      "@logger": ["core/logger.ts"],
+      "@router": ["http/routes/index.ts"],
+      "@discord": ["bot"],
+      "@discord/*": ["bot/*"],
+      "@commands/*": ["bot/commands/*"],
+      "@events/*": ["bot/events/*"],
+      "@routes/*": ["http/routes/*"],
+      "@utils/*": ["utils/*"],
+      "@middlewares/*": ["http/middlewares/*"],
+      "@config/*": ["config/*"],
+      "@core/*": ["core/*"],
+      "@services/*": ["services/*"],
+      "@types/*": ["types/*"],
+      "@schemas/*": ["schemas/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
