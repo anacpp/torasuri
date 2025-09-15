@@ -5,6 +5,8 @@ const envSchema = z.object({
   PORT: z.string().optional(),
   LOG_LEVEL: z.string().optional(),
   NODE_ENV: z.enum(['development','test','production']).default('development'),
+  GEMINI_API_KEY: z.string().min(1, 'Required for Gemini integration'),
+  GEMINI_MODEL: z.string().default('gemini-1.5-flash')
 });
 
 type Env = z.infer<typeof envSchema>;
