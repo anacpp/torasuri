@@ -1,24 +1,36 @@
 import { Events, Interaction } from 'discord.js';
 import { logger } from '@logger';
+import { treasuryHandlers } from '@discord/commands/treasury';
 
 export const name = Events.InteractionCreate;
 export async function execute(interaction: Interaction) {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command: any = (interaction.client as any).commands?.get(interaction.commandName);
-  if (!command) {
-    logger.warn({ command: interaction.commandName }, 'Unknown command');
-    return;
-  }
-
   try {
-    await command.execute(interaction);
+    if (interaction.isChatInputCommand()) {
+      const command: any = (interaction.client as any).commands?.get(interaction.commandName);
+      if (!command) {
+        logger.warn({ command: interaction.commandName }, 'Unknown command');
+        return;
+      }
+      await command.execute(interaction);
+      return;
+    }
+
+    if (interaction.isButton()) {
+      if (interaction.customId.startsWith('treasury_')) {
+        return treasuryHandlers.handleButton(interaction);
+      }
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('treasury_modal_')) {
+        return treasuryHandlers.handleModal(interaction);
+      }
+    }
   } catch (error) {
-    logger.error({ err: error }, 'Command execution error');
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: 'There was an error executing this command.', ephemeral: true });
-    } else {
-      await interaction.reply({ content: 'There was an error executing this command.', ephemeral: true });
+    logger.error({ err: error }, 'Interaction handler error');
+    if ('replied' in interaction && (interaction as any).replied) return;
+    if ('reply' in interaction) {
+      try { (interaction as any).reply({ content: 'Error handling interaction', ephemeral: true }); } catch {}
     }
   }
 }

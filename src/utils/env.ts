@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   DISCORD_TOKEN: z.string().min(1),
+  DISCORD_CLIENT_ID: z.string().min(1, 'Application (client) ID required'),
+  DISCORD_GUILD_ID: z.string().optional(),
   PORT: z.string().optional(),
   LOG_LEVEL: z.string().optional(),
   NODE_ENV: z.enum(['development','test','production']).default('development'),
