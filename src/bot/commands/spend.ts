@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { env } from '@utils/env';
 import { getTreasuryConfig } from '@services/treasury';
 import { canUserPropose, createSpend, listPending, listHistory, getSpend, addSignature, finalizeSubmit, cancelSpend, hasQuorum } from '@services/spend';
 import { getSigner } from '@services/signers';
@@ -16,11 +17,17 @@ export const data = new SlashCommandBuilder()
   .addSubcommand(s => s.setName('history').setDescription('Recent submitted/cancelled/expired spends'))
   .addSubcommand(s => s.setName('view').setDescription('View single spend').addStringOption(o => o.setName('id').setDescription('Spend ID').setRequired(true)));
 
-function spendActionRow(id: string, status: string, canApprove: boolean) {
+function spendActionRow(id: string, status: string, canApprove: boolean, guildId?: string, userId?: string) {
   const row = new ActionRowBuilder<ButtonBuilder>();
   if (status === 'collecting') {
     row.addComponents(new ButtonBuilder().setCustomId(`spend_refresh_${id}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary));
-    if (canApprove) row.addComponents(new ButtonBuilder().setCustomId(`spend_sign_${id}`).setLabel('Approve / Sign').setStyle(ButtonStyle.Success));
+    if (canApprove) {
+      if (guildId && userId) {
+        const link = `${env.SERVER_URL.replace(/\/$/,'')}/spend/tx?guildId=${encodeURIComponent(guildId)}&spendId=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`;
+        row.addComponents(new ButtonBuilder().setURL(link).setLabel('Assinar via Wallet').setStyle(ButtonStyle.Link));
+      }
+      row.addComponents(new ButtonBuilder().setCustomId(`spend_sign_${id}`).setLabel('Assinar Manual').setStyle(ButtonStyle.Success));
+    }
     row.addComponents(new ButtonBuilder().setCustomId(`spend_cancel_${id}`).setLabel('Cancel').setStyle(ButtonStyle.Danger));
   } else {
     row.addComponents(new ButtonBuilder().setCustomId(`spend_view_${id}`).setLabel('View').setStyle(ButtonStyle.Secondary).setDisabled(true));
@@ -58,46 +65,47 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       if (amount <= 0) return interaction.reply({ content: 'Amount must be > 0', ephemeral: true });
       if (!(await canUserPropose(guildId, interaction.user.id))) return interaction.reply({ content: 'Not authorized.', ephemeral: true });
       const spend = await createSpend({ guildId, proposerUserId: interaction.user.id, destination, memo, amountXlm: amount });
-      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true) });
+      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true, guildId, interaction.user.id) });
     }
     if (sub === 'purpose') {
       if (!(await canUserPropose(guildId, interaction.user.id))) return interaction.reply({ content: 'Not authorized.', ephemeral: true });
       return interaction.showModal(buildPurposeModal());
     }
     if (sub === 'list') {
-      const pending = listPending(guildId);
+      const pending = await listPending(guildId);
       if (!pending.length) return interaction.reply({ content: 'No pending spends.', ephemeral: true });
-      const lines = pending.map(s => `${s.id} ${s.amountXlm}XLM -> ${s.destination.substring(0,6)}... (${s.approvals.length}/${s.requiredApprovals})`);
+      const lines = pending.map((s: any) => `${s.id} ${s.amountXlm}XLM -> ${s.destination.substring(0,6)}... (${s.approvals.length}/${s.requiredApprovals})`);
       return interaction.reply({ content: lines.join('\n'), ephemeral: true });
     }
     if (sub === 'history') {
-      const hist = listHistory(guildId, 10);
+      const hist = await listHistory(guildId, 10);
       if (!hist.length) return interaction.reply({ content: 'No history.', ephemeral: true });
-      const lines = hist.map(s => `${s.id} ${s.amountXlm}XLM ${s.status}${s.submissionHash ? ' ' + s.submissionHash.slice(0,8)+'...' : ''}`);
+      const lines = hist.map((s: any) => `${s.id} ${s.amountXlm}XLM ${s.status}${s.submissionHash ? ' ' + s.submissionHash.slice(0,8)+'...' : ''}`);
       return interaction.reply({ content: lines.join('\n'), ephemeral: true });
     }
     if (sub === 'view') {
       const id = interaction.options.getString('id', true);
-      const spend = getSpend(guildId, id);
+      const spend = await getSpend(guildId, id);
       if (!spend) return interaction.reply({ content: 'Not found.', ephemeral: true });
       const canApprove = !!(await getSigner(guildId, interaction.user.id)) || (await getTreasuryConfig(guildId))?.adminUserId === interaction.user.id;
-      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, canApprove), ephemeral: true });
+      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, canApprove, guildId, interaction.user.id), ephemeral: true });
     }
   } catch (e: any) {
-    logger.error({ e }, 'spend_command_error');
-    return interaction.reply({ content: 'Error: ' + e.message, ephemeral: true });
+    let msg = 'Error: ' + e.message;
+    if (e.message === 'DEST_IS_TREASURY') msg = 'Destino é a própria tesouraria. Use uma conta diferente (o signer deve registrar uma chave que não seja a da tesouraria).';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 }
 
 // Interaction handlers for buttons & modals
 export const spendHandlers = { handleButton, handleModal };
 
-function buildSignModal(id: string) {
-  const m = new ModalBuilder().setCustomId(`spend_modal_sign_${id}`).setTitle('Provide Signed XDR');
-  m.addComponents(
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('public_key').setLabel('Signer Public Key').setStyle(TextInputStyle.Short).setRequired(true)),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('signed_xdr').setLabel('Signed Transaction XDR').setStyle(TextInputStyle.Paragraph).setRequired(true))
-  );
+function buildSignModal(id: string, needPublicKey: boolean) {
+  const m = new ModalBuilder().setCustomId(`spend_modal_sign_${id}`).setTitle('Enviar Assinatura');
+  if (needPublicKey) {
+    m.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('public_key').setLabel('Signer Public Key').setStyle(TextInputStyle.Short).setRequired(true)));
+  }
+  m.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('signed_xdr').setLabel('Signed Transaction XDR').setStyle(TextInputStyle.Paragraph).setRequired(true)));
   return m;
 }
 
@@ -112,11 +120,36 @@ function buildPurposeModal() {
   return modal;
 }
 
+async function resolveRecipientUserId(interaction: any, input: string): Promise<string | undefined> {
+  // Accept direct mention <@id> or <@!id>
+  const mention = input.match(/<@!?(\d+)>/);
+  if (mention) return mention[1];
+  // Accept raw numeric ID
+  if (/^\d{10,20}$/.test(input)) return input;
+  // Accept @username or username
+  const cleaned = input.startsWith('@') ? input.slice(1) : input;
+  if (!cleaned) return undefined;
+  try {
+    const guild = interaction.guild;
+    if (!guild) return undefined;
+    // Try cached first
+    let member = guild.members.cache.find((m: any) => m.user.username.toLowerCase() === cleaned.toLowerCase() || m.displayName?.toLowerCase() === cleaned.toLowerCase());
+    if (member) return member.user.id;
+    // Fallback fetch (may require GUILD_MEMBERS intent)
+    const fetched = await guild.members.fetch({ query: cleaned, limit: 5 }).catch(()=>undefined);
+    if (fetched) {
+      member = fetched.find((m: any) => m.user.username.toLowerCase() === cleaned.toLowerCase() || m.displayName?.toLowerCase() === cleaned.toLowerCase());
+      if (member) return member.user.id;
+    }
+  } catch {}
+  return undefined;
+}
+
 async function handleButton(interaction: any) {
   if (!interaction.guildId) return interaction.reply({ content: 'Guild only', ephemeral: true });
   const [prefix, action, id] = interaction.customId.split('_');
   if (prefix !== 'spend') return;
-  const spend = getSpend(interaction.guildId, id);
+  const spend = await getSpend(interaction.guildId, id);
   if (!spend) return interaction.reply({ content: 'Spend not found.', ephemeral: true });
   const cfg = await getTreasuryConfig(interaction.guildId);
   const isAdmin = cfg?.adminUserId === interaction.user.id;
@@ -131,7 +164,9 @@ async function handleButton(interaction: any) {
       case 'sign': {
         if (spend.status !== 'collecting') return interaction.reply({ content: 'Not collecting.', ephemeral: true });
         if (!canApprove) return interaction.reply({ content: 'Not authorized.', ephemeral: true });
-        return interaction.showModal(buildSignModal(spend.id));
+        const needPk = !signer; // if user not a registered signer (edge) ask pk
+        try { await interaction.reply({ content: `Assine o XDR abaixo com sua carteira (ou use o botão de wallet) e depois envie na modal se necessário.\n\n\u0060\u0060\u0060\n${spend.baseXdr}\n\u0060\u0060\u0060`, ephemeral: true }); } catch {}
+        return interaction.followUp({ content: 'Abrindo modal manual...', ephemeral: true }).catch(()=>{}).finally(()=> interaction.showModal(buildSignModal(spend.id, needPk)));
       }
       case 'cancel': {
         if (spend.proposerUserId !== interaction.user.id && !isAdmin) return interaction.reply({ content: 'Not proposer.', ephemeral: true });
@@ -156,34 +191,49 @@ async function handleModal(interaction: any) {
       const description = interaction.fields.getTextInputValue('description').trim();
       const recipientRaw = interaction.fields.getTextInputValue('recipient').trim();
       const amountRaw = interaction.fields.getTextInputValue('amount').trim().replace(',', '.');
-      const mentionMatch = recipientRaw.match(/<@!?(\d+)>/);
-      if (!mentionMatch) return interaction.reply({ content: 'Destinatário deve ser uma menção válida.', ephemeral: true });
-      const recipientUserId = mentionMatch[1];
+
+      const recipientUserId = await resolveRecipientUserId(interaction, recipientRaw);
+      if (!recipientUserId) return interaction.reply({ content: 'Destinatário inválido. Use menção (@usuario), ID ou username exato.', ephemeral: true });
+
       const recipientSigner = await getSigner(guildId, recipientUserId);
       if (!recipientSigner) return interaction.reply({ content: 'Destinatário não possui signer verificado.', ephemeral: true });
-      const amount = Number(amountRaw);
-      if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Valor inválido.', ephemeral: true });
+
       const cfg = await getTreasuryConfig(guildId);
       if (!cfg) return interaction.reply({ content: 'Treasury not configured.', ephemeral: true });
+      if (recipientSigner.publicKey === cfg.stellarPublicKey) {
+        return interaction.reply({ content: 'A chave do destinatário é a mesma da tesouraria. O destinatário precisa registrar uma chave separada para receber fundos.', ephemeral: true });
+      }
+
+      const amount = Number(amountRaw);
+      if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Valor inválido.', ephemeral: true });
+
       const memoCandidate = title.slice(0, 28);
-      const spend = await createSpend({ guildId, proposerUserId: proposerId, destination: recipientSigner.publicKey, memo: memoCandidate, amountXlm: amount, title, description, recipientUserId });
-      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true) });
+      let spend;
+      try {
+        spend = await createSpend({ guildId, proposerUserId: proposerId, destination: recipientSigner.publicKey, memo: memoCandidate, amountXlm: amount, title, description, recipientUserId });
+      } catch (e: any) {
+        if (e.message === 'DEST_IS_TREASURY') return interaction.reply({ content: 'Destino não pode ser a tesouraria. Use uma conta diferente.', ephemeral: true });
+        throw e;
+      }
+      return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true, guildId, proposerId) });
     } catch (e: any) {
+      let msg = 'Erro ao criar gasto: ' + e.message;
+      if (e.message === 'DEST_IS_TREASURY') msg = 'Destino é a própria tesouraria. Registre outra chave para o destinatário.';
       logger.error({ e }, 'purpose_modal_error');
-      return interaction.reply({ content: 'Erro ao criar gasto: ' + e.message, ephemeral: true });
+      return interaction.reply({ content: msg, ephemeral: true });
     }
   }
-  if (interaction.customId === 'spend_modal_sign') {
-    const parts = interaction.customId.split('_');
-    if (parts[0] !== 'spend' || parts[1] !== 'modal' || parts[2] !== 'sign') return;
-    const id = parts.slice(3).join('_');
-    const spend = getSpend(interaction.guildId, id);
+  if (interaction.customId.startsWith('spend_modal_sign_')) {
+    const id = interaction.customId.replace('spend_modal_sign_', '');
+    const spend = await getSpend(interaction.guildId, id);
     if (!spend) return interaction.reply({ content: 'Spend not found.', ephemeral: true });
-    const pk = interaction.fields.getTextInputValue('public_key').trim();
+    const signerRecord = await getSigner(interaction.guildId, interaction.user.id);
+    const pkField = interaction.fields.getTextInputValue('public_key')?.trim();
+    const publicKey = signerRecord?.publicKey || pkField;
+    if (!publicKey || !/^G[A-Z0-9]{55}$/.test(publicKey)) return interaction.reply({ content: 'Invalid or missing public key', ephemeral: true });
     const xdr = interaction.fields.getTextInputValue('signed_xdr').trim();
-    if (!/^G[A-Z0-9]{55}$/.test(pk)) return interaction.reply({ content: 'Invalid public key', ephemeral: true });
     try {
-      const res = await addSignature(interaction.guildId, spend.id, interaction.user.id, pk, xdr);
+      const res = await addSignature(interaction.guildId, spend.id, interaction.user.id, publicKey, xdr);
       const updated = res.updatedSpend;
       let autoSubmit = false;
       if (updated.type === 'MICRO' && updated.approvals.length >= 1) autoSubmit = true;

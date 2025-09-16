@@ -11,13 +11,16 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
   MONGO_URI: z.string().min(1, 'MONGO_URI required'),
   STELLAR_NETWORK: z.enum(['PUBLIC','TESTNET']).default('PUBLIC'),
-  SERVER_URL: z.string().url('SERVER_URL must be a valid URL'),
+  SERVER_URL: z.string().url('SERVER_URL must be a valid URL').optional(),
   STELLAR_CHALLENGE_SECRET: z.string().optional(),
   HORIZON_URL: z.string().optional(),
   DONATION_POLL_INTERVAL_MS: z.string().optional(),
   DONATION_MAX_CACHE: z.string().optional(),
   SPEND_EXPIRY_MINUTES: z.string().optional(),
-  SPEND_LIST_PAGE_SIZE: z.string().optional()
+  SPEND_LIST_PAGE_SIZE: z.string().optional(),
+  NGROK_AUTH_TOKEN: z.string().optional(),
+  NGROK_REGION: z.string().optional(),
+  NGROK_EDGE: z.string().optional()
 });
 
 type Env = z.infer<typeof envSchema>;
