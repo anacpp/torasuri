@@ -12,7 +12,10 @@ const envSchema = z.object({
   MONGO_URI: z.string().min(1, 'MONGO_URI required'),
   STELLAR_NETWORK: z.enum(['PUBLIC','TESTNET']).default('PUBLIC'),
   SERVER_URL: z.string().url('SERVER_URL must be a valid URL'),
-  STELLAR_CHALLENGE_SECRET: z.string().optional() // server signing key (sep-10)
+  STELLAR_CHALLENGE_SECRET: z.string().optional(),
+  HORIZON_URL: z.string().optional(),
+  DONATION_POLL_INTERVAL_MS: z.string().optional(),
+  DONATION_MAX_CACHE: z.string().optional()
 });
 
 type Env = z.infer<typeof envSchema>;

@@ -5,6 +5,8 @@ import { treasurySchema } from '@schemas/treasury';
 import { createOrVerifySigner, getSigner, listSigners, removeSigner } from '@services/signers';
 import { buildChallenge, verifySignedChallenge } from '@services/sep10';
 import { env } from '@utils/env';
+import { createPendingIntent, generateDonationMemo, listRecent, getTreasuryBalance, startDonationWatcher } from '@services/donations';
+import QRCode from 'qrcode';
 
 // In-memory wizard state
 interface WizardState {
@@ -31,7 +33,10 @@ export const data = new SlashCommandBuilder()
       .addSubcommand(s => s.setName('list').setDescription('List signers (admin only)'))
   )
   .addSubcommand(s => s.setName('view').setDescription('View current treasury config'))
-  .addSubcommand(s => s.setName('reset').setDescription('Reset existing treasury config'));
+  .addSubcommand(s => s.setName('reset').setDescription('Reset existing treasury config'))
+  .addSubcommand(s => s.setName('donate').setDescription('Doar para a tesouraria').addNumberOption(o => o.setName('amount').setDescription('Valor sugerido em XLM').setRequired(false)))
+  .addSubcommand(s => s.setName('donations').setDescription('Listar últimas doações'))
+  .addSubcommand(s => s.setName('balance').setDescription('Mostrar saldo atual'));
 
 // ---------- Signer (non-custodial) helpers ----------
 function signerConnectRow() {
@@ -56,8 +61,9 @@ function startTimeout(guildId: string) {
 
 async function startWizard(interaction: ChatInputCommandInteraction) {
   const guildId = interaction.guildId!;
+  const existing = await getTreasuryConfig(guildId);
   if (wizardStates.has(guildId)) return interaction.reply({ content: 'A wizard is already running. Cancel or wait for it to finish.', ephemeral: true });
-  if (getTreasuryConfig(guildId)) return interaction.reply({ content: 'Treasury already configured. Use /treasury reset to reconfigure.', ephemeral: true });
+  if (existing) return interaction.reply({ content: 'Treasury already configured. Use /treasury reset to reconfigure.', ephemeral: true });
   const timeout = setTimeout(() => { wizardStates.delete(guildId); }, 5 * 60 * 1000);
   wizardStates.set(guildId, { stage: 1, data: { guildId, adminUserId: interaction.user.id }, timeout, adminUserId: interaction.user.id });
   await interaction.reply({ content: 'Step 1: Enter Stellar public key', ephemeral: true, components: [buildEnterKeyRow()] });
@@ -102,7 +108,7 @@ function parseAmountToCents(input: string): number | null {
 // ---------- Signer command logic ----------
 async function handleSignerCommand(interaction: ChatInputCommandInteraction, sub: string) {
   if (!interaction.guildId) return interaction.reply({ content: 'Guild only.', ephemeral: true });
-  const guildId = interaction.guildId; const userId = interaction.user.id; const cfg = getTreasuryConfig(guildId);
+  const guildId = interaction.guildId; const userId = interaction.user.id; const cfg = await getTreasuryConfig(guildId);
   switch (sub) {
     case 'connect': {
       const existing = await getSigner(guildId, userId);
@@ -241,11 +247,78 @@ async function tryFinalize(interaction: any, state: WizardState) {
 function computeMultisig(state: WizardState) { const total = 1 + (state.data.additionalSignerIds?.length || 0); const required = Math.max(1, Math.ceil(total * 2/3)); return { requiredApprovals: required, totalSigners: total, quorumRatio: `${required}/${total}` }; }
 function summaryContent(state: WizardState) { return 'Summary:\n' + 'Stellar: ' + state.data.stellarPublicKey + '\nThreshold (cents): ' + (state.data.microSpendThresholdInCents ?? 0) + '\nAdditional signers: ' + (state.data.additionalSignerIds?.length || 0); }
 
+async function handleDonation(interaction: ChatInputCommandInteraction) {
+  const guildId = interaction.guildId!;
+  const cfg = await getTreasuryConfig(guildId);
+  if (!cfg) return interaction.reply({ content: 'Tesouraria não configurada.', ephemeral: true });
+  const amount = interaction.options.getNumber('amount', false) || undefined;
+  startDonationWatcher(guildId, cfg.stellarPublicKey);
+  const memo = generateDonationMemo(guildId, interaction.user.id);
+  createPendingIntent(guildId, interaction.user.id, memo);
+  const network = env.STELLAR_NETWORK === 'PUBLIC' ? 'public' : 'testnet';
+  const params = new URLSearchParams({ destination: cfg.stellarPublicKey, memo, memo_type: 'TEXT', network });
+  if (amount) params.append('amount', amount.toString());
+  const uriParams = params.toString();
+  const rawSep7 = `web+stellar:pay?${uriParams}`; // for QR
+  const clickUrl = `${env.SERVER_URL.replace(/\/$/,'')}/pay?${uriParams}`; // clickable HTTP wrapper
+  let qrAttachment: any = undefined;
+  try {
+    const dataUrl = await QRCode.toDataURL(rawSep7, { margin: 1, scale: 5 });
+    const base64 = dataUrl.split(',')[1];
+    const buf = Buffer.from(base64, 'base64');
+    qrAttachment = { attachment: buf, name: 'donation_qr.png' };
+  } catch (e) {
+    logger.warn({ e }, 'qr_generation_failed');
+  }
+  const lines = [
+    'Obrigado por apoiar a tesouraria!',
+    `Endereço: ${cfg.stellarPublicKey}`,
+    `Memo (NÃO ALTERAR): ${memo}`,
+    amount ? `Valor sugerido: ${amount} XLM` : 'Valor: livre (defina na sua wallet)',
+    '1. Clique no link ou escaneie o QR',
+    '2. Confirme endereço e memo antes de enviar',
+    '3. Envie a transação',
+    '4. O bot detectará em até ~30s',
+    '',
+    `Link: ${clickUrl}`
+  ];
+  return interaction.reply({ content: lines.join('\n'), files: qrAttachment ? [qrAttachment] : [], ephemeral: true });
+}
+
+async function handleDonationsList(interaction: ChatInputCommandInteraction) {
+  const guildId = interaction.guildId!; const recs = listRecent(guildId, 10);
+  if (!recs.length) return interaction.reply({ content: 'Nenhuma doação registrada.', ephemeral: true });
+  const lines = ['Últimas doações:'];
+  for (const r of recs) {
+    const user = r.userId ? `<@${r.userId}>` : 'anon';
+    lines.push(`${user} ${r.amount} XLM (tx: ${r.txHash.slice(0,8)}...)`);
+  }
+  return interaction.reply({ content: lines.join('\n'), ephemeral: true });
+}
+
+async function handleBalance(interaction: ChatInputCommandInteraction) {
+  const guildId = interaction.guildId!; const cfg = await getTreasuryConfig(guildId);
+  if (!cfg) return interaction.reply({ content: 'Tesouraria não configurada.', ephemeral: true });
+  startDonationWatcher(guildId, cfg.stellarPublicKey);
+  const horizon = process.env.HORIZON_URL || (env.STELLAR_NETWORK === 'PUBLIC' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org');
+  try {
+    const bal = await getTreasuryBalance(horizon, cfg.stellarPublicKey, guildId);
+    return interaction.reply({ content: `Saldo: ${bal} XLM`, ephemeral: true });
+  } catch (e:any) {
+    logger.error({ e }, 'balance_fetch_error');
+    return interaction.reply({ content: 'Falha ao buscar saldo.', ephemeral: true });
+  }
+}
+
+// ---------- Main command handler ----------
 export async function execute(interaction: ChatInputCommandInteraction) {
   const subGroup = interaction.options.getSubcommandGroup(false); const sub = interaction.options.getSubcommand(false);
   if (subGroup === 'setup' && sub === 'start') return startWizard(interaction);
   if (subGroup === 'signer') return handleSignerCommand(interaction, sub!);
-  if (sub === 'view') { const cfg = interaction.guildId ? getTreasuryConfig(interaction.guildId) : undefined; if (!cfg) return interaction.reply({ content: 'Not configured.', ephemeral: true }); return interaction.reply({ content: '```json\n' + JSON.stringify(cfg, null, 2) + '\n```', ephemeral: true }); }
+  if (sub === 'donate') return handleDonation(interaction);
+  if (sub === 'donations') return handleDonationsList(interaction);
+  if (sub === 'balance') return handleBalance(interaction);
+  if (sub === 'view') { const cfg = interaction.guildId ? await getTreasuryConfig(interaction.guildId) : undefined; if (!cfg) return interaction.reply({ content: 'Not configured.', ephemeral: true }); return interaction.reply({ content: '```json\n' + JSON.stringify(cfg, null, 2) + '\n```', ephemeral: true }); }
   if (sub === 'reset') return interaction.reply({ content: 'Reset not yet implemented in this version.', ephemeral: true });
   return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
 }
