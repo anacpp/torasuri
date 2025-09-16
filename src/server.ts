@@ -36,7 +36,8 @@ async function bootstrap() {
       useDefaults: true,
       directives: {
         // Permite scripts locais e o CDN do freighter api.
-        'script-src': ["'self'", 'https://cdnjs.cloudflare.com'],
+        'script-src': ["'self'", 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
+        'connect-src': ["'self'", 'https://horizon-testnet.stellar.org', 'https://horizon.stellar.org']
       }
     }
   }));

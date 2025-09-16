@@ -6,7 +6,6 @@ import { createOrVerifySigner, getSigner, listSigners, removeSigner } from '@ser
 import { buildChallenge, verifySignedChallenge } from '@services/sep10';
 import { env } from '@utils/env';
 import { createPendingIntent, generateDonationMemo, listRecent, getTreasuryBalance, startDonationWatcher } from '@services/donations';
-import QRCode from 'qrcode';
 
 // In-memory wizard state
 interface WizardState {
@@ -34,10 +33,10 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand(s => s.setName('view').setDescription('View current treasury config'))
   .addSubcommand(s => s.setName('reset').setDescription('Reset existing treasury config'))
-  .addSubcommand(s => s.setName('donate').setDescription('Doar para a tesouraria').addNumberOption(o => o.setName('amount').setDescription('Valor sugerido em XLM').setRequired(false)))
-  .addSubcommand(s => s.setName('donations').setDescription('Listar últimas doações'))
-  .addSubcommand(s => s.setName('balance').setDescription('Mostrar saldo atual'))
-  .addSubcommand(s => s.setName('spend').setDescription('Gastar da tesouraria (novo comando em breve)'));
+  .addSubcommand(s => s.setName('donate').setDescription('Donate to the treasury').addNumberOption(o => o.setName('amount').setDescription('Suggested amount (XLM)').setRequired(false)))
+  .addSubcommand(s => s.setName('donations').setDescription('List recent donations'))
+  .addSubcommand(s => s.setName('balance').setDescription('Show current balance'))
+  .addSubcommand(s => s.setName('spend').setDescription('Spend from treasury (coming soon)'));
 
 // ---------- Signer (non-custodial) helpers ----------
 function signerConnectRow() {
@@ -251,51 +250,35 @@ function summaryContent(state: WizardState) { return 'Summary:\n' + 'Stellar: ' 
 async function handleDonation(interaction: ChatInputCommandInteraction) {
   const guildId = interaction.guildId!;
   const cfg = await getTreasuryConfig(guildId);
-  if (!cfg) return interaction.reply({ content: 'Tesouraria não configurada.', ephemeral: true });
+  if (!cfg) return interaction.reply({ content: 'Treasury not configured.', ephemeral: true });
   const amount = interaction.options.getNumber('amount', false) || undefined;
   startDonationWatcher(guildId, cfg.stellarPublicKey);
   const memo = generateDonationMemo(guildId, interaction.user.id);
   createPendingIntent(guildId, interaction.user.id, memo);
-  const network = env.STELLAR_NETWORK === 'PUBLIC' ? 'public' : 'testnet';
-  const params = new URLSearchParams({ destination: cfg.stellarPublicKey, memo, memo_type: 'TEXT', network });
-  if (amount) params.append('amount', amount.toString());
-  const uriParams = params.toString();
-  const rawSep7 = `web+stellar:pay?${uriParams}`; // for QR
   const baseServer = (env.SERVER_URL || '').replace(/\/$/,'') || `http://localhost:${process.env.PORT||3000}`;
-  const clickUrl = `${baseServer}/pay?${uriParams}`; // clickable HTTP wrapper
   const donateUrl = `${baseServer}/donate?guildId=${guildId}&memo=${encodeURIComponent(memo)}${amount?`&amount=${amount}`:''}`;
-  let qrAttachment: any = undefined;
-  try {
-    const dataUrl = await QRCode.toDataURL(rawSep7, { margin: 1, scale: 5 });
-    const base64 = dataUrl.split(',')[1];
-    const buf = Buffer.from(base64, 'base64');
-    qrAttachment = { attachment: buf, name: 'donation_qr.png' };
-  } catch (e) {
-    logger.warn({ e }, 'qr_generation_failed');
-  }
   const lines = [
-    'Obrigado por apoiar a tesouraria!',
-    `Endereço: ${cfg.stellarPublicKey}`,
-    `Memo (NÃO ALTERAR): ${memo}`,
-    amount ? `Valor sugerido: ${amount} XLM` : 'Valor: livre (defina na sua wallet)',
-    '---',
-    'Opções de envio:',
-    'A) Link SEP-7 / QR (qualquer wallet compatível)',
-    `   ${clickUrl}`,
-    'B) Freighter (assinar e enviar direto pelo navegador)',
-    `   ${donateUrl}`,
-    '---',
-    '1. Verifique endereço e memo antes de enviar',
-    '2. Envie a transação',
-    '3. O bot detectará em até ~30s'
+    'Thank you for supporting the treasury!',
+    `Address: ${cfg.stellarPublicKey}`,
+    `Memo (DO NOT CHANGE): ${memo}`,
+    amount ? `Suggested amount: ${amount} XLM` : 'Amount: free (set in your wallet)',
+    '',
+    'Open in browser (Freighter):',
+    donateUrl,
+    '',
+    'Flow:',
+    '1. Connect Freighter',
+    '2. Set amount (if desired)',
+    '3. Sign & Submit',
+    '4. Bot will detect within ~30s'
   ];
-  return interaction.reply({ content: lines.join('\n'), files: qrAttachment ? [qrAttachment] : [], ephemeral: true });
+  return interaction.reply({ content: lines.join('\n'), ephemeral: true });
 }
 
 async function handleDonationsList(interaction: ChatInputCommandInteraction) {
   const guildId = interaction.guildId!; const recs = listRecent(guildId, 10);
-  if (!recs.length) return interaction.reply({ content: 'Nenhuma doação registrada.', ephemeral: true });
-  const lines = ['Últimas doações:'];
+  if (!recs.length) return interaction.reply({ content: 'No donations recorded.', ephemeral: true });
+  const lines = ['Recent donations:'];
   for (const r of recs) {
     const user = r.userId ? `<@${r.userId}>` : 'anon';
     lines.push(`${user} ${r.amount} XLM (tx: ${r.txHash.slice(0,8)}...)`);
@@ -305,15 +288,15 @@ async function handleDonationsList(interaction: ChatInputCommandInteraction) {
 
 async function handleBalance(interaction: ChatInputCommandInteraction) {
   const guildId = interaction.guildId!; const cfg = await getTreasuryConfig(guildId);
-  if (!cfg) return interaction.reply({ content: 'Tesouraria não configurada.', ephemeral: true });
+  if (!cfg) return interaction.reply({ content: 'Treasury not configured.', ephemeral: true });
   startDonationWatcher(guildId, cfg.stellarPublicKey);
   const horizon = process.env.HORIZON_URL || (env.STELLAR_NETWORK === 'PUBLIC' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org');
   try {
     const bal = await getTreasuryBalance(horizon, cfg.stellarPublicKey, guildId);
-    return interaction.reply({ content: `Saldo: ${bal} XLM`, ephemeral: true });
+    return interaction.reply({ content: `Balance: ${bal} XLM`, ephemeral: true });
   } catch (e:any) {
     logger.error({ e }, 'balance_fetch_error');
-    return interaction.reply({ content: 'Falha ao buscar saldo.', ephemeral: true });
+    return interaction.reply({ content: 'Failed to fetch balance.', ephemeral: true });
   }
 }
 

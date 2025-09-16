@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
     .addStringOption(o => o.setName('destination').setDescription('Destination account (G...)').setRequired(true))
     .addNumberOption(o => o.setName('amount').setDescription('Amount in XLM').setRequired(true))
     .addStringOption(o => o.setName('memo').setDescription('Optional memo').setRequired(false)))
-  .addSubcommand(s => s.setName('purpose').setDescription('Propor gasto (modal) com título, descrição e destinatário'))
+  .addSubcommand(s => s.setName('purpose').setDescription('Propose spend via modal with title, description and recipient'))
   .addSubcommand(s => s.setName('list').setDescription('List pending spends'))
   .addSubcommand(s => s.setName('history').setDescription('Recent submitted/cancelled/expired spends'))
   .addSubcommand(s => s.setName('view').setDescription('View single spend').addStringOption(o => o.setName('id').setDescription('Spend ID').setRequired(true)));
@@ -25,9 +25,9 @@ function spendActionRow(id: string, status: string, canApprove: boolean, guildId
       if (guildId && userId) {
         const baseUrl = (env.SERVER_URL || '').replace(/\/$/,'') || 'http://localhost:3000';
         const link = `${baseUrl}/spend/tx?guildId=${encodeURIComponent(guildId)}&spendId=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`;
-        row.addComponents(new ButtonBuilder().setURL(link).setLabel('Assinar').setStyle(ButtonStyle.Link));
+        row.addComponents(new ButtonBuilder().setURL(link).setLabel('Sign').setStyle(ButtonStyle.Link));
       }
-      row.addComponents(new ButtonBuilder().setCustomId(`spend_sign_${id}`).setLabel('Assinar Manual').setStyle(ButtonStyle.Success));
+      row.addComponents(new ButtonBuilder().setCustomId(`spend_sign_${id}`).setLabel('Manual Sign').setStyle(ButtonStyle.Success));
     }
     row.addComponents(new ButtonBuilder().setCustomId(`spend_cancel_${id}`).setLabel('Cancel').setStyle(ButtonStyle.Danger));
   } else {
@@ -38,19 +38,19 @@ function spendActionRow(id: string, status: string, canApprove: boolean, guildId
 
 function formatSpend(spend: any) {
   return [
-    spend.title ? `Título: ${spend.title}` : undefined,
-    spend.description ? `Descrição: ${spend.description}` : undefined,
+    spend.title ? `Title: ${spend.title}` : undefined,
+    spend.description ? `Description: ${spend.description}` : undefined,
     `ID: ${spend.id}`,
-    `Tipo: ${spend.type}`,
-    `Valor: ${spend.amountXlm} XLM`,
-    spend.recipientUserId ? `Destinatário Discord: <@${spend.recipientUserId}>` : undefined,
+    `Type: ${spend.type}`,
+    `Amount: ${spend.amountXlm} XLM`,
+    spend.recipientUserId ? `Discord Recipient: <@${spend.recipientUserId}>` : undefined,
     `Destination (Stellar): ${spend.destination}`,
     spend.memo ? `Memo: ${spend.memo}` : undefined,
-    `Aprovações: ${spend.approvals.length}/${spend.requiredApprovals}`,
+    `Approvals: ${spend.approvals.length}/${spend.requiredApprovals}`,
     `Status: ${spend.status}`,
     spend.submissionHash ? `Tx Hash: ${spend.submissionHash}` : undefined,
-    spend.error ? `Erro: ${spend.error}` : undefined,
-    `Expira em: ${Math.max(0, Math.round((spend.expiresAt - Date.now())/1000))}s`
+    spend.error ? `Error: ${spend.error}` : undefined,
+    `Expires in: ${Math.max(0, Math.round((spend.expiresAt - Date.now())/1000))}s`
   ].filter(Boolean).join('\n');
 }
 
@@ -95,7 +95,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
     }
   } catch (e: any) {
     let msg = 'Error: ' + e.message;
-    if (e.message === 'DEST_IS_TREASURY') msg = 'Destino é a própria tesouraria. Use uma conta diferente (o signer deve registrar uma chave que não seja a da tesouraria).';
+    if (e.message === 'DEST_IS_TREASURY') msg = 'Destination is the treasury itself. Use a different account (signer must register a key other than the treasury key).';
     return interaction.reply({ content: msg, ephemeral: true });
   }
 }
@@ -104,7 +104,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 export const spendHandlers = { handleButton, handleModal };
 
 function buildSignModal(id: string, needPublicKey: boolean) {
-  const m = new ModalBuilder().setCustomId(`spend_modal_sign_${id}`).setTitle('Enviar Assinatura');
+  const m = new ModalBuilder().setCustomId(`spend_modal_sign_${id}`).setTitle('Submit Signature');
   if (needPublicKey) {
     m.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('public_key').setLabel('Signer Public Key').setStyle(TextInputStyle.Short).setRequired(true)));
   }
@@ -113,12 +113,12 @@ function buildSignModal(id: string, needPublicKey: boolean) {
 }
 
 function buildPurposeModal() {
-  const modal = new ModalBuilder().setCustomId('spend_modal_purpose').setTitle('Propor Gasto');
+  const modal = new ModalBuilder().setCustomId('spend_modal_purpose').setTitle('Propose Spend');
   modal.addComponents(
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Título').setStyle(TextInputStyle.Short).setMaxLength(80).setRequired(true)),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Descrição / Motivo').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(true)),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('recipient').setLabel('Destinatário (@menção)').setStyle(TextInputStyle.Short).setRequired(true)),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Valor em XLM').setStyle(TextInputStyle.Short).setRequired(true))
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setMaxLength(80).setRequired(true)),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('description').setLabel('Description / Reason').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(true)),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('recipient').setLabel('Recipient (@mention)').setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('Amount (XLM)').setStyle(TextInputStyle.Short).setRequired(true))
   );
   return modal;
 }
@@ -196,32 +196,32 @@ async function handleModal(interaction: any) {
       const amountRaw = interaction.fields.getTextInputValue('amount').trim().replace(',', '.');
 
       const recipientUserId = await resolveRecipientUserId(interaction, recipientRaw);
-      if (!recipientUserId) return interaction.reply({ content: 'Destinatário inválido. Use menção (@usuario), ID ou username exato.', ephemeral: true });
+      if (!recipientUserId) return interaction.reply({ content: 'Invalid recipient. Use mention (@user), ID or exact username.', ephemeral: true });
 
       const recipientSigner = await getSigner(guildId, recipientUserId);
-      if (!recipientSigner) return interaction.reply({ content: 'Destinatário não possui signer verificado.', ephemeral: true });
+      if (!recipientSigner) return interaction.reply({ content: 'Recipient does not have a verified signer.', ephemeral: true });
 
       const cfg = await getTreasuryConfig(guildId);
       if (!cfg) return interaction.reply({ content: 'Treasury not configured.', ephemeral: true });
       if (recipientSigner.publicKey === cfg.stellarPublicKey) {
-        return interaction.reply({ content: 'A chave do destinatário é a mesma da tesouraria. O destinatário precisa registrar uma chave separada para receber fundos.', ephemeral: true });
+        return interaction.reply({ content: 'Recipient key equals treasury key. Recipient must register a separate key.', ephemeral: true });
       }
 
       const amount = Number(amountRaw);
-      if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Valor inválido.', ephemeral: true });
+      if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Invalid amount.', ephemeral: true });
 
       const memoCandidate = title.slice(0, 28);
       let spend;
       try {
         spend = await createSpend({ guildId, proposerUserId: proposerId, destination: recipientSigner.publicKey, memo: memoCandidate, amountXlm: amount, title, description, recipientUserId, channelId: interaction.channelId, messageId: interaction.id });
       } catch (e: any) {
-        if (e.message === 'DEST_IS_TREASURY') return interaction.reply({ content: 'Destino não pode ser a tesouraria. Use uma conta diferente.', ephemeral: true });
+        if (e.message === 'DEST_IS_TREASURY') return interaction.reply({ content: 'Destination cannot be the treasury. Use a different account.', ephemeral: true });
         throw e;
       }
       return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true, guildId, proposerId) });
     } catch (e: any) {
-      let msg = 'Erro ao criar gasto: ' + e.message;
-      if (e.message === 'DEST_IS_TREASURY') msg = 'Destino é a própria tesouraria. Registre outra chave para o destinatário.';
+      let msg = 'Error creating spend: ' + e.message;
+      if (e.message === 'DEST_IS_TREASURY') msg = 'Destination is the treasury itself. Register a different key for the recipient.';
       logger.error({ e }, 'purpose_modal_error');
       return interaction.reply({ content: msg, ephemeral: true });
     }
@@ -247,9 +247,9 @@ async function handleModal(interaction: any) {
       return interaction.reply({ content: formatSpend(updated), ephemeral: true });
     } catch (e: any) {
       let msg = 'Error: ' + e.message;
-      if (e.message === 'BAD_XDR') msg = 'XDR inválido ou não corresponde à base.';
-      if (e.message === 'MISSING_SIGNATURE') msg = 'Assinatura não encontrada no XDR fornecido.';
-      if (e.message === 'HASH_MISMATCH') msg = 'Transação diferente da original.';
+      if (e.message === 'BAD_XDR') msg = 'XDR invalid or does not match base.';
+      if (e.message === 'MISSING_SIGNATURE') msg = 'Signature not found in provided XDR.';
+      if (e.message === 'HASH_MISMATCH') msg = 'Transaction differs from original.';
       return interaction.reply({ content: msg, ephemeral: true });
     }
   }
