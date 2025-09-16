@@ -1,10 +1,10 @@
-# CommunityCoin: Decentralized Treasury for Online Communities
+# Torasuri: Decentralized Treasury for Online Communities
 
 **Tagline:** "Doar fácil, ver fácil, confiar fácil."
 
 ## Introduction
 
-CommunityCoin (also known as StellarTreasury) is an innovative bot-driven solution for Discord and Telegram communities, revolutionizing how online groups manage their finances. We address critical pain points faced by communities today:
+Torasuti is an innovative bot-driven solution for Discord and Telegram communities, revolutionizing how online groups manage their finances. We address critical pain points faced by communities today:
 
 *   **Complexity of traditional crypto donations:** Difficult for non-technical users.
 *   **Lack of real-time spending transparency:** Opaque financial flows erode trust.
@@ -36,23 +36,11 @@ For this hackathon, we focused on delivering the core value proposition:
 
 User commands the bot ➡️ Bot interacts with Backend API ➡️ Backend API leverages Stellar SDK to manage transactions on Stellar Network ➡️ Real-time updates pushed back to chat and displayed on web dashboard.
 
-## 🛠 Technologies Used
-
-*   **Blockchain Protocol:** [Stellar Network](https://www.stellar.org/) (chosen for its low transaction fees, high speed, native multi-signature capabilities, and robust stablecoin ecosystem)
-*   **Stellar SDK:** `js-stellar-sdk` (for all Stellar-related interactions: account management, transaction building, signing, and submission)
-*   **Bot Frameworks:**
-    *   `discord.js` (for Discord integration)
-    *   `telegraf.js` (for Telegram integration)
-*   **Backend:** Node.js with Express.js (handling bot commands, orchestrating Stellar API calls, and managing treasurer permissions)
-*   **Frontend (Dashboard):** React.js (for the simple, real-time web dashboard)
-*   **Database:** MongoDB / Firestore (for storing bot-related metadata like community configurations, treasurer roles, and transaction descriptions)
-*   **Stellar Integrations:** StellarExpert API (for fetching real-time account data and providing links for transaction auditability)
-
 ## 👥 Team
 
 We are a passionate duo committed to empowering online communities with transparent and efficient financial tools:
 
-*   **Ana Carla César**
+*   **Ana Carla César Pereira**
 *   **Marcos Guimarães Trindade**
 
 ##  Future Enhancements (Beyond Hackathon)
