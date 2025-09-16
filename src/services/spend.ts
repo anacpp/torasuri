@@ -5,6 +5,7 @@ import { getSigner } from '@services/signers';
 import * as Stellar from 'stellar-sdk';
 import { env } from '@utils/env';
 import { getCollection } from '@services/db';
+import { getDiscordClient } from '@services/discord';
 
 const { Keypair, Networks, TransactionBuilder, Operation, BASE_FEE, Account, Asset, Horizon } = Stellar as any;
 
@@ -66,8 +67,37 @@ export async function canUserPropose(guildId: string, userId: string) {
 }
 export const canUserApprove = canUserPropose;
 
-export async function createSpend(params: { guildId: string; proposerUserId: string; destination: string; memo?: string; amountXlm: number; title?: string; description?: string; recipientUserId?: string; }) {
-  const { guildId, proposerUserId, destination, memo, amountXlm, title, description, recipientUserId } = params;
+// Simple formatting reused for message updates to avoid circular import with discord command
+function formatSpendInline(spend: PendingSpend) {
+  return [
+    spend.title ? `Título: ${spend.title}` : undefined,
+    `ID: ${spend.id}`,
+    `Valor: ${spend.amountXlm} XLM` ,
+    `Aprovações: ${spend.approvals.length}/${spend.requiredApprovals}`,
+    `Status: ${spend.status}`,
+    spend.submissionHash ? `Hash: ${spend.submissionHash}` : undefined,
+    spend.error ? `Erro: ${spend.error}` : undefined,
+  ].filter(Boolean).join('\n');
+}
+
+async function updateSpendMessage(spend: PendingSpend) {
+  if (!spend.channelId || !spend.messageId) return; // nothing to update
+  const client = getDiscordClient();
+  if (!client) return;
+  try {
+    const channel: any = await client.channels.fetch(spend.channelId).catch(()=>undefined);
+    if (!channel || !channel.isTextBased()) return;
+    const msg = await channel.messages.fetch(spend.messageId).catch(()=>undefined);
+    if (!msg) return;
+    const content = formatSpendInline(spend);
+    await msg.edit({ content }).catch(()=>{});
+  } catch (e:any) {
+    logger.warn({ e: e?.message, spendId: spend.id }, 'update_spend_message_failed');
+  }
+}
+
+export async function createSpend(params: { guildId: string; proposerUserId: string; destination: string; memo?: string; amountXlm: number; title?: string; description?: string; recipientUserId?: string; channelId?: string; messageId?: string; }) {
+  const { guildId, proposerUserId, destination, memo, amountXlm, title, description, recipientUserId, channelId, messageId } = params;
   const cfg = await getTreasuryConfig(guildId); if (!cfg) throw new Error('NO_TREASURY');
   if (destination === cfg.stellarPublicKey) throw new Error('DEST_IS_TREASURY');
   if (!(await canUserPropose(guildId, proposerUserId))) throw new Error('NOT_AUTH');
@@ -119,7 +149,9 @@ export async function createSpend(params: { guildId: string; proposerUserId: str
     expiresAt: (Date.now() + SPEND_EXPIRY_MINUTES * 60 * 1000),
     title: title?.slice(0,80),
     description: description?.slice(0,500),
-    recipientUserId
+    recipientUserId,
+    channelId,
+    messageId
   };
   spends.set(id, spend);
   await saveSpend(spend);
@@ -166,6 +198,7 @@ export async function addSignature(guildId: string, id: string, userId: string, 
   spends.set(spend.id, spend);
   await saveSpend(spend);
   logger.info({ guildId, id, userId }, 'spend_signature_added');
+  await updateSpendMessage(spend);
   return { updatedSpend: spend, added: true };
 }
 
@@ -188,6 +221,7 @@ export async function finalizeSubmit(guildId: string, id: string) {
   }
   spends.set(spend.id, spend);
   await saveSpend(spend);
+  await updateSpendMessage(spend);
   return spend;
 }
 
@@ -199,6 +233,7 @@ export async function cancelSpend(guildId: string, id: string, byUserId: string)
   spends.set(spend.id, spend);
   await saveSpend(spend);
   logger.info({ guildId, id, by: byUserId }, 'spend_cancelled');
+  await updateSpendMessage(spend);
   return spend;
 }
 
@@ -209,12 +244,12 @@ export async function sweepExpiry() {
     const expired = await col.find({ status: 'collecting', expiresAt: { $lt: now } }).toArray();
     if (expired.length) {
       await col.updateMany({ status: 'collecting', expiresAt: { $lt: now } }, { $set: { status: 'expired' } });
-      for (const s of expired) { s.status = 'expired'; spends.set(s.id, s); logger.info({ guildId: s.guildId, id: s.id }, 'spend_expired'); }
+      for (const s of expired) { s.status = 'expired'; spends.set(s.id, s); logger.info({ guildId: s.guildId, id: s.id }, 'spend_expired'); await updateSpendMessage(s); }
     }
   } catch (e:any) {
     logger.error({ e }, 'sweepExpiry_failed');
     // fallback in-memory
-    for (const s of spends.values()) { if (s.status === 'collecting' && now > s.expiresAt) { s.status='expired'; await saveSpend(s); } }
+    for (const s of spends.values()) { if (s.status === 'collecting' && now > s.expiresAt) { s.status='expired'; await saveSpend(s); await updateSpendMessage(s); } }
   }
 }
 

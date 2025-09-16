@@ -23,8 +23,9 @@ function spendActionRow(id: string, status: string, canApprove: boolean, guildId
     row.addComponents(new ButtonBuilder().setCustomId(`spend_refresh_${id}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary));
     if (canApprove) {
       if (guildId && userId) {
-        const link = `${env.SERVER_URL.replace(/\/$/,'')}/spend/tx?guildId=${encodeURIComponent(guildId)}&spendId=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`;
-        row.addComponents(new ButtonBuilder().setURL(link).setLabel('Assinar via Wallet').setStyle(ButtonStyle.Link));
+        const baseUrl = (env.SERVER_URL || '').replace(/\/$/,'') || 'http://localhost:3000';
+        const link = `${baseUrl}/spend/tx?guildId=${encodeURIComponent(guildId)}&spendId=${encodeURIComponent(id)}&userId=${encodeURIComponent(userId)}`;
+        row.addComponents(new ButtonBuilder().setURL(link).setLabel('Assinar').setStyle(ButtonStyle.Link));
       }
       row.addComponents(new ButtonBuilder().setCustomId(`spend_sign_${id}`).setLabel('Assinar Manual').setStyle(ButtonStyle.Success));
     }
@@ -53,6 +54,8 @@ function formatSpend(spend: any) {
   ].filter(Boolean).join('\n');
 }
 
+export { spendActionRow, formatSpend }; // export for potential reuse
+
 export async function execute(interaction: ChatInputCommandInteraction) {
   if (!interaction.guildId) return interaction.reply({ content: 'Guild only', ephemeral: true });
   const guildId = interaction.guildId; const sub = interaction.options.getSubcommand();
@@ -64,7 +67,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
       if (!/^G[A-Z0-9]{55}$/.test(destination)) return interaction.reply({ content: 'Invalid destination.', ephemeral: true });
       if (amount <= 0) return interaction.reply({ content: 'Amount must be > 0', ephemeral: true });
       if (!(await canUserPropose(guildId, interaction.user.id))) return interaction.reply({ content: 'Not authorized.', ephemeral: true });
-      const spend = await createSpend({ guildId, proposerUserId: interaction.user.id, destination, memo, amountXlm: amount });
+      const spend = await createSpend({ guildId, proposerUserId: interaction.user.id, destination, memo, amountXlm: amount, channelId: interaction.channelId, messageId: interaction.id });
       return interaction.reply({ content: formatSpend(spend), components: spendActionRow(spend.id, spend.status, true, guildId, interaction.user.id) });
     }
     if (sub === 'purpose') {
@@ -210,7 +213,7 @@ async function handleModal(interaction: any) {
       const memoCandidate = title.slice(0, 28);
       let spend;
       try {
-        spend = await createSpend({ guildId, proposerUserId: proposerId, destination: recipientSigner.publicKey, memo: memoCandidate, amountXlm: amount, title, description, recipientUserId });
+        spend = await createSpend({ guildId, proposerUserId: proposerId, destination: recipientSigner.publicKey, memo: memoCandidate, amountXlm: amount, title, description, recipientUserId, channelId: interaction.channelId, messageId: interaction.id });
       } catch (e: any) {
         if (e.message === 'DEST_IS_TREASURY') return interaction.reply({ content: 'Destino não pode ser a tesouraria. Use uma conta diferente.', ephemeral: true });
         throw e;

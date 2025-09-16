@@ -261,7 +261,9 @@ async function handleDonation(interaction: ChatInputCommandInteraction) {
   if (amount) params.append('amount', amount.toString());
   const uriParams = params.toString();
   const rawSep7 = `web+stellar:pay?${uriParams}`; // for QR
-  const clickUrl = `${env.SERVER_URL.replace(/\/$/,'')}/pay?${uriParams}`; // clickable HTTP wrapper
+  const baseServer = (env.SERVER_URL || '').replace(/\/$/,'') || `http://localhost:${process.env.PORT||3000}`;
+  const clickUrl = `${baseServer}/pay?${uriParams}`; // clickable HTTP wrapper
+  const donateUrl = `${baseServer}/donate?guildId=${guildId}&memo=${encodeURIComponent(memo)}${amount?`&amount=${amount}`:''}`;
   let qrAttachment: any = undefined;
   try {
     const dataUrl = await QRCode.toDataURL(rawSep7, { margin: 1, scale: 5 });
@@ -276,12 +278,16 @@ async function handleDonation(interaction: ChatInputCommandInteraction) {
     `Endereço: ${cfg.stellarPublicKey}`,
     `Memo (NÃO ALTERAR): ${memo}`,
     amount ? `Valor sugerido: ${amount} XLM` : 'Valor: livre (defina na sua wallet)',
-    '1. Clique no link ou escaneie o QR',
-    '2. Confirme endereço e memo antes de enviar',
-    '3. Envie a transação',
-    '4. O bot detectará em até ~30s',
-    '',
-    `Link: ${clickUrl}`
+    '---',
+    'Opções de envio:',
+    'A) Link SEP-7 / QR (qualquer wallet compatível)',
+    `   ${clickUrl}`,
+    'B) Freighter (assinar e enviar direto pelo navegador)',
+    `   ${donateUrl}`,
+    '---',
+    '1. Verifique endereço e memo antes de enviar',
+    '2. Envie a transação',
+    '3. O bot detectará em até ~30s'
   ];
   return interaction.reply({ content: lines.join('\n'), files: qrAttachment ? [qrAttachment] : [], ephemeral: true });
 }

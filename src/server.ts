@@ -10,6 +10,7 @@ const ngrok:any = (ngrokLib as any).default || ngrokLib;
 import { logger } from '@logger';
 import { registerRoutes } from '@router';
 import { createDiscordClient, startDiscordBot } from '@discord/client';
+import { setDiscordClient } from '@services/discord';
 
 const PORT = process.env.PORT || 3000;
 
@@ -45,6 +46,7 @@ async function bootstrap() {
   registerRoutes(app);
 
   const client = createDiscordClient();
+  setDiscordClient(client);
   await startDiscordBot(client);
 
   app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -58,7 +60,7 @@ async function bootstrap() {
         logger.warn('Set SERVER_URL to this ngrok URL for wallet callbacks.');
       }
     } else if (process.env.NGROK_AUTH_TOKEN) {
-      logger.error('Failed to establish ngrok tunnel after retries. Run \"npx ngrok http '+PORT+'\" manually as fallback.');
+      logger.error('Failed to establish ngrok tunnel after retries. Run "npx ngrok http '+PORT+'" manually as fallback.');
     }
   });
 }
