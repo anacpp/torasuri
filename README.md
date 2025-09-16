@@ -1,8 +1,8 @@
-# 🚀 CommunityCoin: Decentralized Treasury for Online Communities
+# CommunityCoin: Decentralized Treasury for Online Communities
 
 **Tagline:** "Doar fácil, ver fácil, confiar fácil."
 
-## ✨ Introduction
+## Introduction
 
 CommunityCoin (also known as StellarTreasury) is an innovative bot-driven solution for Discord and Telegram communities, revolutionizing how online groups manage their finances. We address critical pain points faced by communities today:
 
@@ -14,7 +14,7 @@ Leveraging the **Stellar blockchain**, CommunityCoin provides a secure, transpar
 
 Our solution turns complex financial management into a seamless, integrated chat experience, living up to its promise of "Doar fácil, ver fácil, confiar fácil."
 
-## 🌟 Key Features (MVP)
+## Key Features (MVP)
 
 For this hackathon, we focused on delivering the core value proposition:
 
@@ -55,7 +55,7 @@ We are a passionate duo committed to empowering online communities with transpar
 *   **Ana Carla César**
 *   **Marcos Guimarães Trindade**
 
-## 🚀 Future Enhancements (Beyond Hackathon)
+##  Future Enhancements (Beyond Hackathon)
 
 Our vision extends far beyond this MVP. Future developments will include:
 
@@ -65,7 +65,7 @@ Our vision extends far beyond this MVP. Future developments will include:
 *   **Comprehensive Budgeting Tools:** Allowing treasurers to set up "budget boxes" for specific initiatives and track progress towards funding goals.
 *   **Enhanced UI/UX:** More interactive elements within Discord/Telegram, richer data visualization on the dashboard.
 
-## ⚙️ Setup & Run (Local)
+## Setup & Run (Local)
 
 To run CommunityCoin locally, please follow these steps:
 
