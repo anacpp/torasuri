@@ -1,150 +1,106 @@
-# Torasuri
+# CommunityCoin: Decentralized Treasury for Online Communities
 
-Discord bot + Express HTTP API written in TypeScript.
+**Tagline:** "Doar fácil, ver fácil, confiar fácil."
 
-## Features
-- Express REST API (health + extendable routes)
-- Discord bot (slash command examples: /ping, /treasury)
-- Interactive treasury setup wizard
-- Centralized logger (pino + pretty in dev)
-- Environment validation (Zod)
-- Clean modular structure (commands, events, services, utils)
-- Path aliases via TypeScript + runtime (tsc-alias / module-alias)
-- Linting (ESLint) + Formatting (Prettier) + Husky pre-commit
+## Introduction
 
-## Tech Stack
-TypeScript, Node.js, Express, discord.js, Pino, Zod, ESLint, Prettier
+CommunityCoin (also known as StellarTreasury) is an innovative bot-driven solution for Discord and Telegram communities, revolutionizing how online groups manage their finances. We address critical pain points faced by communities today:
 
-## Project Structure
-```
-src/
-  server.ts                # Bootstrap (Express + Discord)
-  core/
-    logger.ts              # Logger
-  bot/
-    client.ts              # Discord client creation & login + command registration
-    commands/
-      ping.ts              # Example ping command
-      treasury.ts          # Treasury wizard command
-    events/
-      interactionCreate.ts # Interaction handler (commands, buttons, modals)
-      ready.ts             # Ready event
-      messageCreate.ts     # Gemini mention parsing example
-  http/
-    routes/
-      index.ts             # Route registration
-  services/
-    gemini.ts              # Gemini API wrapper
-    treasury.ts            # Treasury config store
-  schemas/
-    treasury.ts            # Zod schema for treasury configs
-  utils/
-    env.ts                 # Environment validation
-```
+*   **Complexity of traditional crypto donations:** Difficult for non-technical users.
+*   **Lack of real-time spending transparency:** Opaque financial flows erode trust.
+*   **Bureaucracy of multi-signature for micro-expenses:** Hinders agility for daily operational needs.
 
-## Requirements
-- Node.js >= 18.17
-- A Discord bot token (https://discord.com/developers/applications)
+Leveraging the **Stellar blockchain**, CommunityCoin provides a secure, transparent, and user-friendly platform. It empowers community members to **donate effortlessly** via simple chat commands and QR codes, while enabling treasurers to execute **micro-spending instantly** for everyday needs (e.g., server costs, community events) without cumbersome, multi-level approvals. All financial activities are publicly recorded on the Stellar network, reflected on a transparent dashboard, and notified in real-time, fostering unparalleled trust and engagement.
 
-## Environment Variables
-Copy `.env.example` to `.env` and fill values:
-```
-DISCORD_TOKEN=your-token
-DISCORD_CLIENT_ID=your-app-client-id
-# Optional guild for faster dev registration
-DISCORD_GUILD_ID=your-guild-id
-PORT=3000
-LOG_LEVEL=info
-GEMINI_API_KEY=your-gemini-key
-GEMINI_MODEL=gemini-1.5-flash
-```
-If `DISCORD_GUILD_ID` is present, commands register instantly for that guild; otherwise global registration (may take up to 1 hour to propagate).
+Our solution turns complex financial management into a seamless, integrated chat experience, living up to its promise of "Doar fácil, ver fácil, confiar fácil."
 
-## Installation
-```bash
-npm install
-```
+## Key Features (MVP)
 
-## Development
-```bash
-npm run dev
-```
-Starts:
-- Express server (default: http://localhost:3000)
-- Discord login (requires DISCORD_TOKEN & DISCORD_CLIENT_ID)
+For this hackathon, we focused on delivering the core value proposition:
 
-## Treasury Setup Wizard
-Command: `/treasury setup start`
+1.  **Effortless Donations via Chat:**
+    *   **`/doar <amount> <asset>` command:** Users can initiate donations directly from their Discord/Telegram chat.
+    *   **Dynamic QR Code / Stellar Payment Link:** The bot responds with an easy-to-scan QR code and a clickable payment link, allowing any Stellar wallet user to donate in seconds.
+    *   **Real-time Public Notifications:** Upon successful donation, the bot announces the contribution in the community channel, fostering transparency and appreciation.
 
-Guided steps (ephemeral):
-1. Stellar public key (modal)
-2. Micro-spend threshold (modal, optional, parses formats like 100, 100.50, R$100, 150 reais)
-3. Additional signers (mention users or skip)
-4. Summary + Confirm / Cancel
+2.  **Instant Micro-Spending for Treasurers:**
+    *   **`/gastar <amount> <asset> <recipient_address> <description>` command:** Designated treasurers can execute small expenses directly from the chat.
+    *   **Bypass Bureaucracy:** For amounts below a pre-defined threshold, these transactions are processed instantly, demonstrating how common multi-signature overhead for small costs can be avoided.
+    *   **Public Spending Notifications:** The bot announces the expenditure in the community channel, including a link to the Stellar transaction on StellarExpert for full auditability.
 
-Other subcommands:
-- `/treasury view` shows current config
-- `/treasury reset` (admin only - placeholder in current version)
+3.  **Transparent Community Dashboard:**
+    *   A simple web-based dashboard provides a clear overview of the treasury's current balance and a list of recent transactions (donations and expenditures).
+    *   Each transaction is linked to StellarExpert, ensuring full on-chain verifiability.
 
-Validation:
-- Stellar key must match `^G[A-Z0-9]{55}$`
-- Threshold converted to integer cents
-- Additional signers exclude admin & deduplicated
-- Quorum auto-computed as 2/3 rounded up (requiredApprovals/totalSigners)
+## 💡 How It Works (High-Level Workflow)
 
-On confirmation, final JSON returned:
-```json
-{
-  "type": "treasurySetup",
-  "guildId": "...",
-  "stellarPublicKey": "...",
-  "adminUserId": "...",
-  "microSpendThresholdInCents": 12345,
-  "multisig": { "requiredApprovals":2, "totalSigners":3, "quorumRatio":"2/3" },
-  "additionalSignerIds": ["..."]
-}
-```
+User commands the bot ➡️ Bot interacts with Backend API ➡️ Backend API leverages Stellar SDK to manage transactions on Stellar Network ➡️ Real-time updates pushed back to chat and displayed on web dashboard.
 
-State & Timeouts:
-- One active wizard per guild (5 min timeout)
-- Cancel anytime with Cancel button
-- Bot restart clears in-progress wizard
+## 🛠 Technologies Used
 
-## Path Aliases
-Examples:
-```ts
-import { logger } from '@logger';
-import { createDiscordClient } from '@discord/client';
-```
+*   **Blockchain Protocol:** [Stellar Network](https://www.stellar.org/) (chosen for its low transaction fees, high speed, native multi-signature capabilities, and robust stablecoin ecosystem)
+*   **Stellar SDK:** `js-stellar-sdk` (for all Stellar-related interactions: account management, transaction building, signing, and submission)
+*   **Bot Frameworks:**
+    *   `discord.js` (for Discord integration)
+    *   `telegraf.js` (for Telegram integration)
+*   **Backend:** Node.js with Express.js (handling bot commands, orchestrating Stellar API calls, and managing treasurer permissions)
+*   **Frontend (Dashboard):** React.js (for the simple, real-time web dashboard)
+*   **Database:** MongoDB / Firestore (for storing bot-related metadata like community configurations, treasurer roles, and transaction descriptions)
+*   **Stellar Integrations:** StellarExpert API (for fetching real-time account data and providing links for transaction auditability)
 
-## Build & Run (Production)
-```bash
-npm run build
-npm start
-```
-Outputs JS to `dist/`.
+## 👥 Team
 
-## Slash Commands
-Auto-registered on ready event. Use a guild ID for fast iteration.
+We are a passionate duo committed to empowering online communities with transparent and efficient financial tools:
 
-## Lint & Format
-```bash
-npm run lint
-npm run lint:fix
-npm run format
-```
+*   **Ana Carla César**
+*   **Marcos Guimarães Trindade**
 
-## Deployment Notes
-```bash
-npm run build
-NODE_ENV=production pm2 start dist/server.js --name torasuri
-```
+##  Future Enhancements (Beyond Hackathon)
 
-## TODO
-- Implement /treasury reset logic with admin enforcement
-- Persistence layer (DB) for treasury configs
-- Tests for amount parsing & schema
-- Enhanced permission checks
+Our vision extends far beyond this MVP. Future developments will include:
 
-## License
-MIT
+*   **Advanced On-Chain Governance (via Soroban):** Implementing quadratic voting, delegated voting, and automated proposal execution.
+*   **Seamless Fiat On/Off-Ramps:** Direct integration with local payment providers to easily convert fiat to stablecoins and vice-versa.
+*   **NFT-based Reputation & Access:** Using non-fungible tokens on Stellar for community badges, weighted voting, and token-gated access.
+*   **Comprehensive Budgeting Tools:** Allowing treasurers to set up "budget boxes" for specific initiatives and track progress towards funding goals.
+*   **Enhanced UI/UX:** More interactive elements within Discord/Telegram, richer data visualization on the dashboard.
+
+## Setup & Run (Local)
+
+To run CommunityCoin locally, please follow these steps:
+
+1.  **Clone the repository:**
+    ```bash
+    git clone [YOUR_REPO_URL_HERE]
+    cd communitycoin
+    ```
+2.  **Install dependencies:**
+    ```bash
+    npm install # or yarn install
+    ```
+3.  **Configure environment variables:**
+    *   Create a `.env` file in the root directory.
+    *   Add your Discord Bot Token, Telegram Bot Token, Stellar Secret Key for the treasury account (for MVP), and any API keys (e.g., for StellarExpert).
+    ```
+    DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
+    TELEGRAM_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+    STELLAR_TREASURY_SECRET=YOUR_STELLAR_TREASURY_SECRET_KEY # WARNING: For MVP/Testnet only. Never use mainnet secret keys directly in code.
+    STELLAR_NETWORK=testnet # or public
+    STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+    # ... other variables like MongoDB URI, etc.
+    ```
+4.  **Run the bot:**
+    ```bash
+    npm start # or node src/index.js
+    ```
+5.  **Run the dashboard (if separate):**
+    ```bash
+    cd frontend # or wherever your dashboard code is
+    npm install
+    npm start
+    ```
+    *Ensure the dashboard is configured to connect to your local backend API or directly to the Stellar Horizon endpoint.*
+
+## �� License
+
+This project is licensed under the [MIT License](LICENSE).
