@@ -15,7 +15,9 @@ const envSchema = z.object({
   STELLAR_CHALLENGE_SECRET: z.string().optional(),
   HORIZON_URL: z.string().optional(),
   DONATION_POLL_INTERVAL_MS: z.string().optional(),
-  DONATION_MAX_CACHE: z.string().optional()
+  DONATION_MAX_CACHE: z.string().optional(),
+  SPEND_EXPIRY_MINUTES: z.string().optional(),
+  SPEND_LIST_PAGE_SIZE: z.string().optional()
 });
 
 type Env = z.infer<typeof envSchema>;

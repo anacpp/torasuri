@@ -36,7 +36,8 @@ export const data = new SlashCommandBuilder()
   .addSubcommand(s => s.setName('reset').setDescription('Reset existing treasury config'))
   .addSubcommand(s => s.setName('donate').setDescription('Doar para a tesouraria').addNumberOption(o => o.setName('amount').setDescription('Valor sugerido em XLM').setRequired(false)))
   .addSubcommand(s => s.setName('donations').setDescription('Listar últimas doações'))
-  .addSubcommand(s => s.setName('balance').setDescription('Mostrar saldo atual'));
+  .addSubcommand(s => s.setName('balance').setDescription('Mostrar saldo atual'))
+  .addSubcommand(s => s.setName('spend').setDescription('Gastar da tesouraria (novo comando em breve)'));
 
 // ---------- Signer (non-custodial) helpers ----------
 function signerConnectRow() {

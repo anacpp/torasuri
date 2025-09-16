@@ -1,6 +1,7 @@
 import { Events, Interaction } from 'discord.js';
 import { logger } from '@logger';
 import { treasuryHandlers } from '@discord/commands/treasury';
+import { spendHandlers } from '@discord/commands/spend';
 
 export const name = Events.InteractionCreate;
 export async function execute(interaction: Interaction) {
@@ -19,11 +20,17 @@ export async function execute(interaction: Interaction) {
       if (interaction.customId.startsWith('treasury_')) {
         return treasuryHandlers.handleButton(interaction);
       }
+      if (interaction.customId.startsWith('spend_')) {
+        return spendHandlers.handleButton(interaction);
+      }
     }
 
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith('treasury_modal_')) {
         return treasuryHandlers.handleModal(interaction);
+      }
+      if (interaction.customId.startsWith('spend_modal_')) {
+        return spendHandlers.handleModal(interaction);
       }
     }
   } catch (error) {
